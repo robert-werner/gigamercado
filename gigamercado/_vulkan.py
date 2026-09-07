@@ -100,7 +100,7 @@ const QP = 0.78539816339744830962;
 
 fn burn_at(r: i32, c: i32) -> bool {
     let idx = u32(r * u.ncols + c);
-    return (burn[idx >> 5u] >> (idx & 31u)) & 1u != 0u;
+    return (burn[idx >> 5u] >> (idx & 31u) & 1u) != 0u;
 }
 
 @compute @workgroup_size(16, 16)
