@@ -59,7 +59,7 @@ class OpenCLBackend:
     # -- public batch operations -----------------------------------
 
     def xy_batch(self, lngs, lats):
-        """Batch mercantile.xy -- lng,lat arrays to Web Mercator x,y."""
+        """Batch ct.xy -- lng,lat arrays to Web Mercator x,y."""
         n = len(lngs)
         lngs = np.ascontiguousarray(lngs, np.float64)
         lats = np.ascontiguousarray(lats, np.float64)
@@ -103,7 +103,7 @@ class OpenCLBackend:
         return olng, olat
 
     def tile_merc_batch(self, lngs, lats, zoom):
-        """Batch mercantile.tile(lng, lat, zoom) via GPU Gudermannian."""
+        """Batch ct.tile(lng, lat, zoom) via GPU Gudermannian."""
         n = len(lngs)
         lngs = np.ascontiguousarray(lngs, np.float64)
         lats = np.ascontiguousarray(lats, np.float64)

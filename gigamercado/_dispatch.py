@@ -71,7 +71,7 @@ backend_name = _backend_name
 
 
 def xy_batch(lngs, lats):
-    """Batch mercantile.xy. Works on GPU or CPU."""
+    """Batch ct.xy. Works on GPU or CPU."""
     if _gpu is not None:
         return _gpu.xy_batch(lngs, lats)
     from gigamercado._accel import _xy_batch
@@ -101,7 +101,7 @@ def lnglat_batch(xs, ys):
 
 
 def tile_merc_batch(lngs, lats, zoom):
-    """Batch mercantile.tile via GPU or CPU."""
+    """Batch ct.tile via GPU or CPU."""
     if _gpu is not None:
         return _gpu.tile_merc_batch(lngs, lats, zoom)
     from gigamercado._accel import _tile_merc_batch

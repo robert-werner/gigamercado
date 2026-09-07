@@ -54,7 +54,7 @@ __kernel void tile_merc_batch(
     size_t i = get_global_id(0);
     if (i >= n) return;
 
-    /* Gudermannian inverse (matches mercantile._xy exactly). */
+    /* Gudermannian inverse (matches cyrcantile._xy exactly). */
     double l = lng[i] / 360.0 + 0.5;
     double sinlat = sin(lat[i] * D2R);
     double yf = 0.5 - 0.25 * log((1.0 + sinlat) / (1.0 - sinlat)) / PI;

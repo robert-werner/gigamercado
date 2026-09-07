@@ -1,5 +1,6 @@
-import mercantile
+import cyrcantile as ct
 import numpy as np
+from cyrcantile import Tile
 from rasterio import Affine, features
 
 from gigamercado import super_utils as sutils
@@ -16,9 +17,9 @@ def union(inputtiles, parsenames):
     # make an array of shape (xrange + 3, yrange + 3)
     burn = sutils.burnXYZs(tiles, xmin, xmax, ymin, ymax, 0)
 
-    nw = mercantile.xy(*mercantile.ul(xmin, ymin, zoom))
+    nw = ct.xy(*ct.ul(Tile(xmin, ymin, zoom)))
 
-    se = mercantile.xy(*mercantile.ul(xmax + 1, ymax + 1, zoom))
+    se = ct.xy(*ct.ul(Tile(xmax + 1, ymax + 1, zoom)))
 
     aff = Affine(
         ((se[0] - nw[0]) / float(xmax - xmin + 1)),

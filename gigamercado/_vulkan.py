@@ -236,9 +236,7 @@ class VulkanBackend:
         bx = self._out(n * 4)
         by = self._out(n * 4)
         bu = self._uni([n])
-        self._dispatch_1d(
-            "xy", [(0, bl), (1, ba), (2, bx), (3, by), (20, bu)], n
-        )
+        self._dispatch_1d("xy", [(0, bl), (1, ba), (2, bx), (3, by), (20, bu)], n)
         return (
             self._read(bx, np.float32, n).astype(np.float64),
             self._read(by, np.float32, n).astype(np.float64),
@@ -252,9 +250,7 @@ class VulkanBackend:
         bo = self._out(n * 4)
         bl = self._out(n * 4)
         bu = self._uni([n])
-        self._dispatch_1d(
-            "lnglat", [(0, bx), (1, by), (2, bo), (3, bl), (20, bu)], n
-        )
+        self._dispatch_1d("lnglat", [(0, bx), (1, by), (2, bo), (3, bl), (20, bu)], n)
         return (
             self._read(bo, np.float32, n).astype(np.float64),
             self._read(bl, np.float32, n).astype(np.float64),
@@ -268,9 +264,7 @@ class VulkanBackend:
         bx = self._out(n * 4)
         by = self._out(n * 4)
         bu = self._uni([zoom, n])
-        self._dispatch_1d(
-            "tile", [(0, bl), (1, ba), (2, bx), (3, by), (20, bu)], n
-        )
+        self._dispatch_1d("tile", [(0, bl), (1, ba), (2, bx), (3, by), (20, bu)], n)
         return self._read(bx, np.int32, n), self._read(by, np.int32, n)
 
     def edge_stencil(self, burn_padded, xmin, ymin, zoom):

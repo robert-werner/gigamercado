@@ -1,6 +1,7 @@
-import mercantile
+import cyrcantile as ct
 import numpy as np
 from affine import Affine
+from cyrcantile import Tile
 from rasterio import features
 
 from gigamercado._accel import (
@@ -17,7 +18,7 @@ def project_geom(geom):
     """Project a GeoJSON geometry from lng/lat to Web Mercator.
 
     Uses GPU batch projection for geometries with >4 vertices (when a GPU
-    backend is available), Numba otherwise, falling back to mercantile.xy.
+    backend is available), Numba otherwise, falling back to cyrcantile.xy.
     """
     gtype = geom["type"]
     if gtype == "Point":
@@ -25,7 +26,7 @@ def project_geom(geom):
         if HAS_GPU or HAS_NUMBA:
             x, y = _xy_one(coords[0], coords[1])
         else:
-            x, y = mercantile.xy(*coords)
+            x, y = ct.xy(*coords)
         return {"type": "Point", "coordinates": [float(x), float(y)]}
 
     elif gtype == "LineString":
@@ -40,7 +41,7 @@ def project_geom(geom):
             }
         return {
             "type": "LineString",
-            "coordinates": [mercantile.xy(*c) for c in coords],
+            "coordinates": [ct.xy(*c) for c in coords],
         }
 
     elif gtype == "Polygon":
@@ -52,7 +53,7 @@ def project_geom(geom):
                 ox, oy = _gpu_xy_batch(a[:, 0], a[:, 1])
                 parts.append([[float(ox[i]), float(oy[i])] for i in range(n)])
             else:
-                parts.append([mercantile.xy(*c) for c in ring])
+                parts.append([ct.xy(*c) for c in ring])
         return {"type": "Polygon", "coordinates": parts}
 
 
@@ -87,8 +88,8 @@ def find_extrema(features):
 def tile_extrema(bounds, zoom):
     if HAS_NUMBA:
         return tile_extrema_fast(bounds, zoom)
-    minimumTile = mercantile.tile(bounds[0], bounds[3], zoom)
-    maximumTile = mercantile.tile(bounds[2], bounds[1], zoom)
+    minimumTile = ct.tile(bounds[0], bounds[3], zoom)
+    maximumTile = ct.tile(bounds[2], bounds[1], zoom)
 
     return {
         "x": {"min": minimumTile.x, "max": maximumTile.x + 1},
@@ -97,12 +98,8 @@ def tile_extrema(bounds, zoom):
 
 
 def make_transform(tilerange, zoom):
-    ulx, uly = mercantile.xy(
-        *mercantile.ul(tilerange["x"]["min"], tilerange["y"]["min"], zoom)
-    )
-    lrx, lry = mercantile.xy(
-        *mercantile.ul(tilerange["x"]["max"], tilerange["y"]["max"], zoom)
-    )
+    ulx, uly = ct.xy(*ct.ul(Tile(tilerange["x"]["min"], tilerange["y"]["min"], zoom)))
+    lrx, lry = ct.xy(*ct.ul(Tile(tilerange["x"]["max"], tilerange["y"]["max"], zoom)))
     xcell = (lrx - ulx) / float(tilerange["x"]["max"] - tilerange["x"]["min"])
     ycell = (uly - lry) / float(tilerange["y"]["max"] - tilerange["y"]["min"])
     return Affine(xcell, 0, ulx, 0, -ycell, uly)

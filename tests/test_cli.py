@@ -1,7 +1,8 @@
 import json
 import os
 
-import mercantile
+import cyrcantile as ct
+from cyrcantile import Tile
 from click.testing import CliRunner
 from gigamercado.scripts.cli import cli
 
@@ -46,7 +47,8 @@ def test_burn_cli():
 
 def test_burn_tile_center_point_roundtrip():
     tile = [83885, 202615, 19]
-    w, s, e, n = mercantile.bounds(*tile)
+    b = ct.bounds(Tile(*tile))
+    w, s, e, n = b.west, b.south, b.east, b.north
 
     x = (e - w) / 2 + w
     y = (n - s) / 2 + s
@@ -64,9 +66,9 @@ def test_burn_tile_center_point_roundtrip():
 
 
 def test_burn_tile_center_lines_roundtrip():
-    tiles = list(mercantile.children([0, 0, 0]))
-    bounds = (mercantile.bounds(*t) for t in tiles)
-    coords = (((e - w) / 2 + w, (n - s) / 2 + s) for w, s, e, n in bounds)
+    tiles = ct.children(Tile(0, 0, 0))
+    bounds = (ct.bounds(t) for t in tiles)
+    coords = (((b.east - b.west) / 2 + b.west, (b.north - b.south) / 2 + b.south) for b in bounds)
 
     features = {
         "type": "Feature",
@@ -79,7 +81,8 @@ def test_burn_tile_center_lines_roundtrip():
     result = runner.invoke(cli, ["burn", "1"], input=json.dumps(features))
 
     output_tiles = [json.loads(t) for t in result.output.split("\n") if t]
-    assert sorted(output_tiles) == sorted([list(t) for t in tiles])
+    expected_tiles = sorted([[t.x, t.y, t.z] for t in tiles])
+    assert sorted(output_tiles) == expected_tiles
 
 
 def test_burn_cli_tile_shape():

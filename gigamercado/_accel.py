@@ -53,7 +53,7 @@ _CPU_WORKERS = __import__("os").cpu_count() or 4
 
 @njit(cache=True, fastmath=True)
 def _xy_one(lng, lat):
-    """mercantile.xy for a single point"""
+    """ct.xy for a single point"""
     x = _RE * lng * _D2R
     y = _RE * math.log(math.tan(_QUARTER_PI + lat * _D2R * 0.5))
     return x, y
@@ -61,7 +61,7 @@ def _xy_one(lng, lat):
 
 @njit(cache=True, fastmath=True, nogil=True)
 def _xy_batch(lngs, lats, xs, ys, n):
-    """Batch mercantile.xy — writes into xs, ys arrays."""
+    """Batch ct.xy — writes into xs, ys arrays."""
     for i in range(n):
         xs[i] = _RE * lngs[i] * _D2R
         ys[i] = _RE * math.log(math.tan(_QUARTER_PI + lats[i] * _D2R * 0.5))
@@ -69,7 +69,7 @@ def _xy_batch(lngs, lats, xs, ys, n):
 
 @njit(cache=True, fastmath=True, nogil=True)
 def _ul_batch(tx, ty, olng, olat, zoom, n):
-    """Batch mercantile.ul — (xtile, ytile, zoom) -> (lng, lat)."""
+    """Batch ct.ul — (xtile, ytile, zoom) -> (lng, lat)."""
     z2 = 2.0**zoom
     for i in range(n):
         olng[i] = tx[i] / z2 * 360.0 - 180.0
@@ -266,17 +266,17 @@ def tile_extrema_fast(bounds, zoom):
 
 @njit(cache=True, fastmath=True)
 def _tile_xy(lng, lat, zoom):
-    """mercantile.tile (lng, lat, zoom) -> int (x, y) -- scalar, for Numba.
+    """ct.tile (lng, lat, zoom) -> int (x, y) -- scalar, for Numba.
 
-    Mirrors the mercantile.tile implementation exactly: convert to
+    Mirrors the cyrcantile.tile implementation exactly: convert to
     normalised 0-1 Mercator position, then tile via floor((pos + eps) * 2^z).
 
-    mercantile._xy uses Gudermannian: y = 0.5 - 0.25*ln((1+sin)/(1-sin))/pi
+    cyrcantile._xy uses Gudermannian: y = 0.5 - 0.25*ln((1+sin)/(1-sin))/pi
     which equals: y = 0.5 - 0.5*ln(tan(pi/4 + lat_rad/2))/pi
     """
     lat_rad = lat * _D2R
     sinlat = math.sin(lat_rad)
-    # Safe Gudermannian inverse -- matches mercantile._xy exactly
+    # Safe Gudermannian inverse -- matches cyrcantile._xy exactly
     logarg = (1.0 + sinlat) / (1.0 - sinlat)
     y01 = 0.5 - 0.25 * math.log(logarg) / _PI
     x01 = lng / 360.0 + 0.5
@@ -299,7 +299,7 @@ def _tile_xy(lng, lat, zoom):
 
 @njit(cache=True, fastmath=True, nogil=True)
 def _tile_merc_batch(lngs, lats, ox, oy, zoom, n):
-    """Batch mercantile.tile — writes into ox, oy arrays (single @njit call)."""
+    """Batch ct.tile — writes into ox, oy arrays (single @njit call)."""
     z2 = 2.0**zoom
     eps = 1e-14
     for i in range(n):

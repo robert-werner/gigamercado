@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "gigamercado"
 version = "0.4.0"
-description = "Supercharged mercantile"
+description = "Supercharged cyrcantile"
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [{ name = "Mapbox Raster", email = "raster@mapbox.com" }]
@@ -15,11 +15,11 @@ dependencies = [
   "click",
   "click-plugins",
   "cligj",
-  "mercantile",
+  "cyrcantile @ git+https://github.com/robert-werner/cyrcantile-opencl.git",
   "numpy",
   "rasterio"
 ]
-keywords = ["mapbox", "mercantile", "tiles"]
+keywords = ["cyrcantile", "tiles", "gpu", "mercantile"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
@@ -32,8 +32,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/mapbox/gigamercado"
-Source = "https://github.com/mapbox/gigamercado"
+Homepage = "https://github.com/robert-wermer/gigamercado"
+Source = "https://github.com/robert-wermer/gigamercado"
 
 [project.scripts]
 gigamercado = "gigamercado.scripts.cli:cli"
@@ -77,5 +77,4 @@ indent-style = "space"
 [tool.pytest.ini_options]
 filterwarnings = [
   "ignore:Sequences of Features, not FeatureCollections, will be the default in version 1.0.0:FutureWarning",
-  "ignore:Mercantile 2.0 will require tile x and y to be within the range .*:FutureWarning",
 ]
