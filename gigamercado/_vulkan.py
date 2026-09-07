@@ -6,8 +6,6 @@ capable device is reachable.
 
 from __future__ import annotations
 
-import struct
-
 import numpy as np
 
 try:
@@ -26,61 +24,62 @@ except Exception:
 
 _WGSL = {}
 
+# NOTE: WGSL storage buffers use f32 (wgpu requires FLOAT64 capability for
+# f64).  We upload f64 inputs as f32, run f32 on GPU, read back f64.
+
 _WGSL["xy"] = """struct UBO { n: u32 };
-@group(0) @binding(0) var<storage, read>       lng  : array<f64>;
-@group(0) @binding(1) var<storage, read>       lat  : array<f64>;
-@group(0) @binding(2) var<storage, read_write> ox   : array<f64>;
-@group(0) @binding(3) var<storage, read_write> oy   : array<f64>;
+@group(0) @binding(0) var<storage, read>       lng  : array<f32>;
+@group(0) @binding(1) var<storage, read>       lat  : array<f32>;
+@group(0) @binding(2) var<storage, read_write> ox   : array<f32>;
+@group(0) @binding(3) var<storage, read_write> oy   : array<f32>;
 @group(0) @binding(20) var<uniform>            u    : UBO;
-const PI = 3.14159265358979323846;
+const PI = 3.141592741012573;
 const RE = 6378137.0;
-const QP = 0.78539816339744830962;
-const D2R = 0.017453292519943295;
+const QP = 0.785398185253143;
+const D2R = 0.017453292384744;
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let i = gid.x;
     if (i >= u.n) { return; }
-    ox[i] = RE * lng[i] * D2R;
-    oy[i] = RE * log(tan(QP + lat[i] * D2R * 0.5));
+    ox[i] = f32(RE) * lng[i] * D2R;
+    oy[i] = f32(RE) * log(tan(QP + lat[i] * D2R * 0.5));
 }"""
 
 _WGSL["lnglat"] = """struct UBO { n: u32 };
-@group(0) @binding(0) var<storage, read>       x    : array<f64>;
-@group(0) @binding(1) var<storage, read>       y    : array<f64>;
-@group(0) @binding(2) var<storage, read_write> olng : array<f64>;
-@group(0) @binding(3) var<storage, read_write> olat : array<f64>;
+@group(0) @binding(0) var<storage, read>       x    : array<f32>;
+@group(0) @binding(1) var<storage, read>       y    : array<f32>;
+@group(0) @binding(2) var<storage, read_write> olng : array<f32>;
+@group(0) @binding(3) var<storage, read_write> olat : array<f32>;
 @group(0) @binding(20) var<uniform>            u    : UBO;
-const PI = 3.14159265358979323846;
-const HP = 1.57079632679489661923;
-const R2D = 57.29577951308232;
+const HP = 1.570796370506287;
+const R2D = 57.295780181884766;
 const RE = 6378137.0;
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let i = gid.x;
     if (i >= u.n) { return; }
-    olng[i] = (x[i] / RE) * R2D;
-    olat[i] = (2.0 * atan(exp(y[i] / RE)) - HP) * R2D;
+    olng[i] = (x[i] / f32(RE)) * R2D;
+    olat[i] = (2.0 * atan(exp(y[i] / f32(RE))) - HP) * R2D;
 }"""
 
 _WGSL["tile"] = """struct UBO { zoom: i32, n: u32 };
-@group(0) @binding(0) var<storage, read>       lng : array<f64>;
-@group(0) @binding(1) var<storage, read>       lat : array<f64>;
+@group(0) @binding(0) var<storage, read>       lng : array<f32>;
+@group(0) @binding(1) var<storage, read>       lat : array<f32>;
 @group(0) @binding(2) var<storage, read_write> ox  : array<i32>;
 @group(0) @binding(3) var<storage, read_write> oy  : array<i32>;
 @group(0) @binding(20) var<uniform>            u   : UBO;
-const PI  = 3.14159265358979323846;
-const R2D = 57.29577951308232;
-const D2R = 0.017453292519943295;
+const PI  = 3.141592741012573;
+const D2R = 0.017453292384744;
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let i = gid.x;
     if (i >= u.n) { return; }
-    let z2 = f64(1 << u.zoom);
+    let z2 = f32(1 << u.zoom);
     let l = lng[i] / 360.0 + 0.5;
     let sinlat = sin(lat[i] * D2R);
-    let sinlat_safe = clamp(sinlat, -0.999999999, 0.999999999);
+    let sinlat_safe = clamp(sinlat, -0.99999994, 0.99999994);
     let yf = 0.5 - 0.25 * log((1.0 + sinlat_safe) / (1.0 - sinlat_safe)) / PI;
-    let eps = 1e-14;
+    let eps = 1e-7;
     if (l <= 0.0)      { ox[i] = 0; }
     else if (l >= 1.0) { ox[i] = i32(z2) - 1; }
     else               { ox[i] = i32(floor((l + eps) * z2)); }
@@ -228,32 +227,47 @@ class VulkanBackend:
 
     def xy_batch(self, lngs, lats):
         n = len(lngs)
-        bl = self._upload(np.ascontiguousarray(lngs, np.float64))
-        ba = self._upload(np.ascontiguousarray(lats, np.float64))
-        bx = self._out(n * 8)
-        by = self._out(n * 8)
+        f32 = np.float32
+        bl = self._upload(np.ascontiguousarray(lngs, f32))
+        ba = self._upload(np.ascontiguousarray(lats, f32))
+        bx = self._out(n * 4)
+        by = self._out(n * 4)
         bu = self._uni([n])
-        self._dispatch_1d("xy", [(0, bl), (1, ba), (2, bx), (3, by), (20, bu)], n)
-        return self._read(bx, np.float64, n), self._read(by, np.float64, n)
+        self._dispatch_1d(
+            "xy", [(0, bl), (1, ba), (2, bx), (3, by), (20, bu)], n
+        )
+        return (
+            self._read(bx, np.float32, n).astype(np.float64),
+            self._read(by, np.float32, n).astype(np.float64),
+        )
 
     def lnglat_batch(self, xs, ys):
         n = len(xs)
-        bx = self._upload(np.ascontiguousarray(xs, np.float64))
-        by = self._upload(np.ascontiguousarray(ys, np.float64))
-        bo = self._out(n * 8)
-        bl = self._out(n * 8)
+        f32 = np.float32
+        bx = self._upload(np.ascontiguousarray(xs, f32))
+        by = self._upload(np.ascontiguousarray(ys, f32))
+        bo = self._out(n * 4)
+        bl = self._out(n * 4)
         bu = self._uni([n])
-        self._dispatch_1d("lnglat", [(0, bx), (1, by), (2, bo), (3, bl), (20, bu)], n)
-        return self._read(bo, np.float64, n), self._read(bl, np.float64, n)
+        self._dispatch_1d(
+            "lnglat", [(0, bx), (1, by), (2, bo), (3, bl), (20, bu)], n
+        )
+        return (
+            self._read(bo, np.float32, n).astype(np.float64),
+            self._read(bl, np.float32, n).astype(np.float64),
+        )
 
     def tile_merc_batch(self, lngs, lats, zoom):
         n = len(lngs)
-        bl = self._upload(np.ascontiguousarray(lngs, np.float64))
-        ba = self._upload(np.ascontiguousarray(lats, np.float64))
+        f32 = np.float32
+        bl = self._upload(np.ascontiguousarray(lngs, f32))
+        ba = self._upload(np.ascontiguousarray(lats, f32))
         bx = self._out(n * 4)
         by = self._out(n * 4)
         bu = self._uni([zoom, n])
-        self._dispatch_1d("tile", [(0, bl), (1, ba), (2, bx), (3, by), (20, bu)], n)
+        self._dispatch_1d(
+            "tile", [(0, bl), (1, ba), (2, bx), (3, by), (20, bu)], n
+        )
         return self._read(bx, np.int32, n), self._read(by, np.int32, n)
 
     def edge_stencil(self, burn_padded, xmin, ymin, zoom):
