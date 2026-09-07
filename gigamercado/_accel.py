@@ -297,6 +297,31 @@ def _tile_xy(lng, lat, zoom):
     return xtile, ytile
 
 
+@njit(cache=True, fastmath=True, nogil=True)
+def _tile_merc_batch(lngs, lats, ox, oy, zoom, n):
+    """Batch mercantile.tile — writes into ox, oy arrays (single @njit call)."""
+    z2 = 2.0**zoom
+    eps = 1e-14
+    for i in range(n):
+        lat_rad = lats[i] * _D2R
+        sinlat = math.sin(lat_rad)
+        logarg = (1.0 + sinlat) / (1.0 - sinlat)
+        y01 = 0.5 - 0.25 * math.log(logarg) / _PI
+        x01 = lngs[i] / 360.0 + 0.5
+        if x01 <= 0.0:
+            ox[i] = 0
+        elif x01 >= 1.0:
+            ox[i] = int(z2) - 1
+        else:
+            ox[i] = int(math.floor((x01 + eps) * z2))
+        if y01 <= 0.0:
+            oy[i] = 0
+        elif y01 >= 1.0:
+            oy[i] = int(z2) - 1
+        else:
+            oy[i] = int(math.floor((y01 + eps) * z2))
+
+
 # ------------------------------------------------------------------ #
 #  Unprojecter                                                         #
 # ------------------------------------------------------------------ #

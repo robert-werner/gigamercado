@@ -104,15 +104,14 @@ def tile_merc_batch(lngs, lats, zoom):
     """Batch mercantile.tile via GPU or CPU."""
     if _gpu is not None:
         return _gpu.tile_merc_batch(lngs, lats, zoom)
-    from gigamercado._accel import _tile_xy
+    from gigamercado._accel import _tile_merc_batch
 
-    lngs = np.asarray(lngs, np.float64)
-    lats = np.asarray(lats, np.float64)
+    lngs = np.ascontiguousarray(lngs, np.float64)
+    lats = np.ascontiguousarray(lats, np.float64)
     n = len(lngs)
     ox = np.empty(n, np.int32)
     oy = np.empty(n, np.int32)
-    for i in range(n):
-        ox[i], oy[i] = _tile_xy(float(lngs[i]), float(lats[i]), zoom)
+    _tile_merc_batch(lngs, lats, ox, oy, zoom, n)
     return ox, oy
 
 

@@ -208,13 +208,14 @@ def _numba_lnglat(xs, ys):
 
 
 def _numba_tile(lngs, lats, zoom):
-    from gigamercado._accel import _tile_xy
+    from gigamercado._accel import _tile_merc_batch
 
     n = len(lngs)
     ox = np.empty(n, np.int32)
     oy = np.empty(n, np.int32)
-    for i in range(n):
-        ox[i], oy[i] = _tile_xy(float(lngs[i]), float(lats[i]), zoom)
+    lngs = np.ascontiguousarray(lngs, np.float64)
+    lats = np.ascontiguousarray(lats, np.float64)
+    _tile_merc_batch(lngs, lats, ox, oy, zoom, n)
     return ox, oy
 
 
