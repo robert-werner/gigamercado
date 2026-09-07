@@ -74,7 +74,7 @@ const D2R = 0.017453292384744;
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let i = gid.x;
     if (i >= u.n) { return; }
-    let z2 = f32(1 << u.zoom);
+    let z2 = exp2(f32(u.zoom));
     let l = lng[i] / 360.0 + 0.5;
     let sinlat = sin(lat[i] * D2R);
     let sinlat_safe = clamp(sinlat, -0.99999994, 0.99999994);
@@ -168,7 +168,10 @@ class VulkanBackend:
 
     def _out(self, nbytes):
         return self.device.create_buffer(
-            size=nbytes, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC
+            size=nbytes,
+            usage=wgpu.BufferUsage.STORAGE
+            | wgpu.BufferUsage.COPY_SRC
+            | wgpu.BufferUsage.COPY_DST,
         )
 
     def _uni(self, values):
