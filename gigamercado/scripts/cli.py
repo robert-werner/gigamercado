@@ -3,10 +3,10 @@ import json
 import click
 import cligj
 
-from supermercado import burntiles, edge_finder, super_utils, uniontiles
+from gigamercado import burntiles, edge_finder, super_utils, uniontiles
 
 
-@click.group("supermercado")
+@click.group("gigamercado")
 def cli():
     pass
 
@@ -57,14 +57,11 @@ cli.add_command(union)
 @cligj.sequence_opt
 @click.argument("zoom", type=int)
 def burn(features, sequence, zoom):
-    """
-    Burn a stream of GeoJSONs into a output stream of the tiles they intersect for a given zoom.
-    """
+    """Burn GeoJSON stream into tiles at the given zoom."""
     features = [f for f in super_utils.filter_features(features)]
 
     tiles = burntiles.burn(features, zoom)
     for t in tiles:
-
         click.echo(t.tolist())
 
 

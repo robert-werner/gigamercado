@@ -1,20 +1,41 @@
-[![PyPI](https://img.shields.io/pypi/v/supermercado.svg)](https://pypi.org/project/supermercado/) [![Tests](https://github.com/mapbox/supermercado/actions/workflows/tests.yml/badge.svg)](https://github.com/mapbox/supermercado/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/gigamercado.svg)](https://pypi.org/project/gigamercado/) [![Tests](https://github.com/mapbox/gigamercado/actions/workflows/tests.yml/badge.svg)](https://github.com/mapbox/gigamercado/actions/workflows/tests.yml)
 
-# supermercado
+# gigamercado
 
-`supermercado` extends the functionality of [`mercantile`](https://github.com/mapbox/mercantile) with additional commands
+`gigamercado` extends the functionality of [`mercantile`](https://github.com/mapbox/mercantile) with additional commands
 
 
 ## Quickstart
 
 ```sh
-pip install supermercado
+pip install gigamercado
 ```
+
+### Numba acceleration (optional)
+
+For large workloads, install Numba for a **3-tier accelerated path** (mirrors
+the [cyrcantile-opencl](https://github.com/...) optimisation strategy):
+
+```sh
+pip install gigamercado[fast]   # adds numba>=0.60
+```
+
+`HAS_NUMBA` (`gigamercado.HAS_NUMBA`) is `True` when the JIT path is active.
+The accelerated code auto-degrades to NumPy/Python when Numba is absent.
+
+| Function | Hot path | Numba acceleration |
+|---|---|---|
+| `burntiles.project_geom()` | Per-vertex `mercantile.xy()` loop | Vectorised `@njit` Mercator kernel |
+| `burntiles.find_extrema()` | Python `zip`/`min`/`max` per feature | NumPy batched min/max on concatenated arrays |
+| `burntiles.tile_extrema()` | `mercantile.tile()` calls | `@njit` `_tile_xy` scalar kernel |
+| `edge_finder.findedges()` | 8x `np.roll` + `dstack` + `min` | Fused `@njit(parallel=True)` 3x3 stencil (eliminates 8 full-array copies) |
+| `super_utils.Unprojecter.unproject()` | Per-vertex `arctan(exp())` loop | Vectorised `@njit` inverse-Mercator kernel |
+| `super_utils.tile_parser()` | Python `json.loads` / regex per line | `ThreadPoolExecutor` parallel decode |
 
 ### Usage
 
 ```sh
-Usage: supermercado [OPTIONS] COMMAND [ARGS]...
+Usage: gigamercado [OPTIONS] COMMAND [ARGS]...
 
 Options:
   --help  Show this message and exit.
@@ -25,10 +46,10 @@ Commands:
   union  Returns the unioned shape of a stream of...
 ```
 
-#### `supermercado burn`
+#### `gigamercado burn`
 
 ```
-<{geojson} stream> | supermercado burn <zoom> | <[x, y, z] stream>
+<{geojson} stream> | gigamercado burn <zoom> | <[x, y, z] stream>
 ```
 
 Takes an input stream of GeoJSON and returns a stream of intersecting `[x, y, z]`s for a given zoom.
@@ -36,34 +57,34 @@ Takes an input stream of GeoJSON and returns a stream of intersecting `[x, y, z]
 ![image](https://cloud.githubusercontent.com/assets/5084513/14003508/94bc0994-f110-11e5-8e99-e9aadf07bf8d.png)
 
 ```sh
-cat data/ellada.geojson | supermercado burn 10 | mercantile shapes | fio collect
+cat data/ellada.geojson | gigamercado burn 10 | mercantile shapes | fio collect
 ```
 
 ![image](https://cloud.githubusercontent.com/assets/5084513/14003559/d5427ba6-f110-11e5-80d5-a2aba6433e77.png)
 
-#### `supermercado edges`
+#### `gigamercado edges`
 ```
-<[x, y, z] stream> | supermercado edges | <[x, y, z] stream>
+<[x, y, z] stream> | gigamercado edges | <[x, y, z] stream>
 ```
 Outputs a stream of `[x, y, z]`s representing the edge tiles of an input stream of `[x, y, z]`s. Edge tile = any tile that is either directly adjacent to a tile that does not exist, or diagonal to an empty tile.
 
 ```
-cat data/ellada.geojson | supermercado burn 10 | supermercado edges | mercantile shapes | fio collect | geojsonio
+cat data/ellada.geojson | gigamercado burn 10 | gigamercado edges | mercantile shapes | fio collect | geojsonio
 ```
 
 ![image](https://cloud.githubusercontent.com/assets/5084513/14003587/01e8e370-f111-11e5-8df4-ac3ae07bbf92.png)
 
 
-#### `supermercado union`
+#### `gigamercado union`
 
 ```
-<[x, y, z] stream> | supermercado union | <{geojson} stream>
+<[x, y, z] stream> | gigamercado union | <{geojson} stream>
 ```
 
 Outputs a stream of unioned GeoJSON from an input stream of `[x, y, z]`s. Like `mercantile shapes` but as an overall footprint instead of individual shapes for each tile.
 
 ```
-cat data/ellada.geojson | supermercado burn 10 | supermercado union | fio collect | geojsonio
+cat data/ellada.geojson | gigamercado burn 10 | gigamercado union | fio collect | geojsonio
 ```
 
 ![image](https://cloud.githubusercontent.com/assets/5084513/14003622/365af88c-f111-11e5-8712-28f42253e270.png)
@@ -72,7 +93,7 @@ cat data/ellada.geojson | supermercado burn 10 | supermercado union | fio collec
 #### `getting crazy`
 
 ```
-cat data/ellada.geojson | supermercado burn 12 | supermercado edges | supermercado union | fio collect | geojsonio
+cat data/ellada.geojson | gigamercado burn 12 | gigamercado edges | gigamercado union | fio collect | geojsonio
 
 ```
 
@@ -84,8 +105,8 @@ cat data/ellada.geojson | supermercado burn 12 | supermercado edges | supermerca
 ### Developing
 
 ```sh
-git clone git@github.com:mapbox/supermercado.git
-cd supermercado
+git clone git@github.com:mapbox/gigamercado.git
+cd gigamercado
 uv venv
 source .venv/bin/activate
 uv sync --all-groups

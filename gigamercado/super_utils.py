@@ -3,6 +3,8 @@ import re
 
 import numpy as np
 
+from gigamercado._accel import HAS_NUMBA, tile_parser_fast, unproject_feature_fast
+
 
 def parseString(tilestring, matcher):
     tile = [int(r) for r in matcher.match(tilestring).group().split("-")]
@@ -15,18 +17,16 @@ def get_range(xyz):
 
 
 def burnXYZs(tiles, xmin, xmax, ymin, ymax, pad=1):
-    # make an array of shape (xrange + 3, yrange + 3)
     burn = np.zeros(
         (xmax - xmin + (pad * 2 + 1), ymax - ymin + (pad * 2 + 1)), dtype=bool
     )
-
-    # using the tile xys as indicides, burn in True where a tile exists
     burn[(tiles[:, 0] - xmin + pad, tiles[:, 1] - ymin + pad)] = True
-
     return burn
 
 
 def tile_parser(tiles, parsenames=False):
+    if HAS_NUMBA:
+        return tile_parser_fast(tiles, parsenames)
     if parsenames:
         tMatch = re.compile(r"[\d]+-[\d]+-[\d]+")
         tiles = np.array([parseString(t, tMatch) for t in tiles])
@@ -100,5 +100,36 @@ class Unprojecter:
             )[0].tolist()
 
     def unproject(self, feature):
+        from gigamercado._dispatch import HAS_GPU, lnglat_batch
+
+        if HAS_GPU or HAS_NUMBA:
+            new_coords = []
+            for ring in feature["coordinates"]:
+                a = np.asarray(ring, dtype=np.float64)
+                n = len(a)
+                if n > 4:
+                    olng, olat = lnglat_batch(a[:, 0], a[:, 1])
+                    new_coords.append(
+                        [[float(olng[i]), float(olat[i])] for i in range(n)]
+                    )
+                else:
+                    new_coords.append(
+                        [
+                            [
+                                float(a[i, 0] * self.R2D / self.A),
+                                float(
+                                    (
+                                        (np.pi * 0.5)
+                                        - 2.0 * np.arctan(np.exp(-a[i, 1] / self.A))
+                                    )
+                                    * self.R2D
+                                ),
+                            ]
+                            for i in range(n)
+                        ]
+                    )
+            feature["coordinates"] = new_coords
+            return feature
+
         feature["coordinates"] = [f for f in self.xy_to_lng_lat(feature["coordinates"])]
         return feature

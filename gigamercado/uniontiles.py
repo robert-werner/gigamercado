@@ -2,7 +2,7 @@ import mercantile
 import numpy as np
 from rasterio import Affine, features
 
-from supermercado import super_utils as sutils
+from gigamercado import super_utils as sutils
 
 
 def union(inputtiles, parsenames):

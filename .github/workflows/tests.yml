@@ -23,7 +23,7 @@ jobs:
         run: uv sync --all-groups --frozen
 
       - name: Lint
-        run: uv run ruff check supermercado tests --output-format=github
+        run: uv run ruff check gigamercado tests --output-format=github
 
       - name: Run tests
         run: uv run pytest

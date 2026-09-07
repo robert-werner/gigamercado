@@ -3,7 +3,7 @@ import os
 
 import mercantile
 from click.testing import CliRunner
-from supermercado.scripts.cli import cli
+from gigamercado.scripts.cli import cli
 
 
 def test_union_cli():

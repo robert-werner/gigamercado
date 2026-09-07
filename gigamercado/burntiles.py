@@ -3,26 +3,57 @@ import numpy as np
 from affine import Affine
 from rasterio import features
 
+from gigamercado._accel import (
+    HAS_NUMBA,
+    _xy_one,
+    find_extrema_fast,
+    tile_extrema_fast,
+)
+from gigamercado._dispatch import HAS_GPU
+from gigamercado._dispatch import xy_batch as _gpu_xy_batch
+
 
 def project_geom(geom):
-    if geom["type"] == "Polygon":
+    """Project a GeoJSON geometry from lng/lat to Web Mercator.
+
+    Uses GPU batch projection for geometries with >4 vertices (when a GPU
+    backend is available), Numba otherwise, falling back to mercantile.xy.
+    """
+    gtype = geom["type"]
+    if gtype == "Point":
+        coords = geom["coordinates"]
+        if HAS_GPU or HAS_NUMBA:
+            x, y = _xy_one(coords[0], coords[1])
+        else:
+            x, y = mercantile.xy(*coords)
+        return {"type": "Point", "coordinates": [float(x), float(y)]}
+
+    elif gtype == "LineString":
+        coords = geom["coordinates"]
+        n = len(coords)
+        if n > 4 and (HAS_GPU or HAS_NUMBA):
+            a = np.asarray(coords, dtype=np.float64)
+            ox, oy = _gpu_xy_batch(a[:, 0], a[:, 1])
+            return {
+                "type": "LineString",
+                "coordinates": [[float(ox[i]), float(oy[i])] for i in range(n)],
+            }
         return {
-            "type": geom["type"],
-            "coordinates": [
-                [mercantile.xy(*coords) for coords in part]
-                for part in geom["coordinates"]
-            ],
+            "type": "LineString",
+            "coordinates": [mercantile.xy(*c) for c in coords],
         }
-    elif geom["type"] == "LineString":
-        return {
-            "type": geom["type"],
-            "coordinates": [mercantile.xy(*coords) for coords in geom["coordinates"]],
-        }
-    elif geom["type"] == "Point":
-        return {
-            "type": geom["type"],
-            "coordinates": mercantile.xy(*geom["coordinates"]),
-        }
+
+    elif gtype == "Polygon":
+        parts = []
+        for ring in geom["coordinates"]:
+            n = len(ring)
+            if n > 4 and (HAS_GPU or HAS_NUMBA):
+                a = np.asarray(ring, dtype=np.float64)
+                ox, oy = _gpu_xy_batch(a[:, 0], a[:, 1])
+                parts.append([[float(ox[i]), float(oy[i])] for i in range(n)])
+            else:
+                parts.append([mercantile.xy(*c) for c in ring])
+        return {"type": "Polygon", "coordinates": parts}
 
 
 def _feature_extrema(geometry):
@@ -38,6 +69,8 @@ def _feature_extrema(geometry):
 
 
 def find_extrema(features):
+    if HAS_NUMBA:
+        return find_extrema_fast(features)
     epsilon = 1.0e-10
     min_x, min_y, max_x, max_y = zip(
         *[_feature_extrema(f["geometry"]) for f in features]
@@ -52,6 +85,8 @@ def find_extrema(features):
 
 
 def tile_extrema(bounds, zoom):
+    if HAS_NUMBA:
+        return tile_extrema_fast(bounds, zoom)
     minimumTile = mercantile.tile(bounds[0], bounds[3], zoom)
     maximumTile = mercantile.tile(bounds[2], bounds[1], zoom)
 

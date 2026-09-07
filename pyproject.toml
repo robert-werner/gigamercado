@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "supermercado"
+name = "gigamercado"
 version = "0.4.0"
 description = "Supercharged mercantile"
 readme = "README.md"
@@ -32,16 +32,19 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/mapbox/supermercado"
-Source = "https://github.com/mapbox/supermercado"
+Homepage = "https://github.com/mapbox/gigamercado"
+Source = "https://github.com/mapbox/gigamercado"
 
 [project.scripts]
-supermercado = "supermercado.scripts.cli:cli"
+gigamercado = "gigamercado.scripts.cli:cli"
 
 [project.optional-dependencies]
 test = [
   "pytest>=8.2.0",
   "pytest-cov"
+]
+fast = [
+  "numba>=0.60",
 ]
 
 [tool.setuptools]
@@ -61,7 +64,7 @@ dev = [
 [tool.ruff]
 line-length = 88
 target-version = "py312"
-src = ["supermercado", "tests"]
+src = ["gigamercado", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
