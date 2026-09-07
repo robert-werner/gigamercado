@@ -59,27 +59,27 @@ def _xy_one(lng, lat):
     return x, y
 
 
-@njit(cache=True, fastmath=True, nogil=True)
+@njit(cache=True, parallel=True, fastmath=True, nogil=True)
 def _xy_batch(lngs, lats, xs, ys, n):
-    """Batch ct.xy — writes into xs, ys arrays."""
-    for i in range(n):
+    """Batch ct.xy — writes into xs, ys arrays. Multi-core via prange."""
+    for i in prange(n):
         xs[i] = _RE * lngs[i] * _D2R
         ys[i] = _RE * math.log(math.tan(_QUARTER_PI + lats[i] * _D2R * 0.5))
 
 
-@njit(cache=True, fastmath=True, nogil=True)
+@njit(cache=True, parallel=True, fastmath=True, nogil=True)
 def _ul_batch(tx, ty, olng, olat, zoom, n):
-    """Batch ct.ul — (xtile, ytile, zoom) -> (lng, lat)."""
+    """Batch ct.ul — (xtile, ytile, zoom) -> (lng, lat). Multi-core via prange."""
     z2 = 2.0**zoom
-    for i in range(n):
+    for i in prange(n):
         olng[i] = tx[i] / z2 * 360.0 - 180.0
         olat[i] = math.atan(math.sinh(_PI * (1.0 - 2.0 * ty[i] / z2))) * _R2D
 
 
-@njit(cache=True, fastmath=True, nogil=True)
+@njit(cache=True, parallel=True, fastmath=True, nogil=True)
 def _unproject_batch(xs, ys, olng, olat, n):
-    """Batch unproject Web Mercator -> lng/lat (fast inverse)."""
-    for i in range(n):
+    """Batch unproject Web Mercator -> lng/lat. Multi-core via prange."""
+    for i in prange(n):
         olng[i] = xs[i] * _R2D / _RE
         olat[i] = (_HALF_PI - 2.0 * math.atan(math.exp(-ys[i] / _RE))) * _R2D
 
@@ -217,6 +217,103 @@ def project_geom_fast(geom):
         return {"type": "Polygon", "coordinates": parts}
 
 
+def _collect_coords(geom):
+    """Extract all (lng, lat) coordinate pairs from a GeoJSON geometry.
+
+    Returns (coords_flat: list[list[float]], ring_sizes: list[int],
+             gtype: str) for later reconstruction.
+    """
+    gtype = geom["type"]
+    if gtype == "Point":
+        c = geom["coordinates"]
+        return [[c[0], c[1]]], [1], gtype
+    elif gtype == "LineString":
+        coords = geom["coordinates"]
+        return coords, [len(coords)], gtype
+    elif gtype == "Polygon":
+        flat, sizes = [], []
+        for ring in geom["coordinates"]:
+            flat.extend(ring)
+            sizes.append(len(ring))
+        return flat, sizes, gtype
+    return [], [], gtype
+
+
+def project_geom_batch(geoms):
+    """Batch-project multiple GeoJSON geometries in a single _xy_batch call.
+
+    Each element in *geoms* is a ``geometry`` dict (the ``"geometry"`` value
+    from a Feature).  Coordinates are collected from all geometries, the
+    Mercator projection is done in one parallel Numba call, and the
+    results are unpacked back into the original GeoJSON structure.
+
+    Returns a list of projected geometry dicts in the same order.
+    """
+    all_lngs = []
+    all_lats = []
+    meta = []  # (gtype, sizes, n_total)
+
+    for geom in geoms:
+        flat, sizes, gtype = _collect_coords(geom)
+        n = len(flat)
+        if n == 0:
+            meta.append((gtype, sizes, 0))
+            continue
+        a = np.asarray(flat, dtype=np.float64)
+        all_lngs.append(a[:, 0])
+        all_lats.append(a[:, 1])
+        meta.append((gtype, sizes, n))
+
+    if not all_lngs:
+        return list(geoms)
+
+    lngs = np.concatenate(all_lngs)
+    lats = np.concatenate(all_lats)
+    total = len(lngs)
+    out_x = np.empty(total, np.float64)
+    out_y = np.empty(total, np.float64)
+    _xy_batch(lngs, lats, out_x, out_y, total)
+
+    results = []
+    pos = 0
+    for gtype, sizes, n in meta:
+        if n == 0:
+            results.append(geoms[len(results)])
+            continue
+        xseg = out_x[pos : pos + n]
+        yseg = out_y[pos : pos + n]
+        pos += n
+
+        if gtype == "Point":
+            results.append(
+                {"type": "Point", "coordinates": [float(xseg[0]), float(yseg[0])]}
+            )
+        elif gtype == "LineString":
+            results.append(
+                {
+                    "type": "LineString",
+                    "coordinates": [
+                        [float(xseg[i]), float(yseg[i])] for i in range(sizes[0])
+                    ],
+                }
+            )
+        elif gtype == "Polygon":
+            rings, offset = [], 0
+            for sz in sizes:
+                rings.append(
+                    [
+                        [float(xseg[offset + j]), float(yseg[offset + j])]
+                        for j in range(sz)
+                    ]
+                )
+                offset += sz
+            results.append({"type": "Polygon", "coordinates": rings})
+        else:
+            results.append(geoms[len(results) - 1])
+
+    return results
+
+
 def find_extrema_fast(features):
     """Batch ``find_extrema`` that collects all coords at once.
 
@@ -297,12 +394,12 @@ def _tile_xy(lng, lat, zoom):
     return xtile, ytile
 
 
-@njit(cache=True, fastmath=True, nogil=True)
+@njit(cache=True, parallel=True, fastmath=True, nogil=True)
 def _tile_merc_batch(lngs, lats, ox, oy, zoom, n):
-    """Batch ct.tile — writes into ox, oy arrays (single @njit call)."""
+    """Batch ct.tile — writes into ox, oy arrays. Multi-core via prange."""
     z2 = 2.0**zoom
     eps = 1e-14
-    for i in range(n):
+    for i in prange(n):
         lat_rad = lats[i] * _D2R
         sinlat = math.sin(lat_rad)
         logarg = (1.0 + sinlat) / (1.0 - sinlat)
@@ -330,32 +427,35 @@ def _tile_merc_batch(lngs, lats, ox, oy, zoom, n):
 def unproject_feature_fast(feature):
     """Vectorised unproject -- replaces Unprojecter.unproject().
 
-    projects each coordinate ring from Web Mercator -> lng/lat using
-    the Numba-accelerated ``_unproject_batch``.
+    Collects all ring coordinates into flat arrays, does a single parallel
+    ``_unproject_batch`` call, then unpacks results back into the ring
+    structure.  Avoids per-ring Numba call overhead.
     """
-    new_coords = []
-    for ring in feature["coordinates"]:
+    rings = feature["coordinates"]
+    all_x = []
+    all_y = []
+    ring_sizes = []
+    for ring in rings:
         n = len(ring)
+        ring_sizes.append(n)
         a = np.asarray(ring, dtype=np.float64)
-        if n > 4:
-            olng = np.empty(n, dtype=np.float64)
-            olat = np.empty(n, dtype=np.float64)
-            _unproject_batch(a[:, 0], a[:, 1], olng, olat, n)
-            new_coords.append([[float(olng[i]), float(olat[i])] for i in range(n)])
-        else:
-            # falls back to scalar loop for tiny rings
-            new_coords.append(
-                [
-                    [
-                        float(a[i, 0] * _R2D / _RE),
-                        float(
-                            (_HALF_PI - 2.0 * math.atan(math.exp(-a[i, 1] / _RE)))
-                            * _R2D
-                        ),
-                    ]
-                    for i in range(n)
-                ]
-            )
+        all_x.append(a[:, 0])
+        all_y.append(a[:, 1])
+
+    xs = np.concatenate(all_x)
+    ys = np.concatenate(all_y)
+    total = len(xs)
+    out_lng = np.empty(total, np.float64)
+    out_lat = np.empty(total, np.float64)
+    _unproject_batch(xs, ys, out_lng, out_lat, total)
+
+    new_coords = []
+    pos = 0
+    for n in ring_sizes:
+        new_coords.append(
+            [[float(out_lng[pos + j]), float(out_lat[pos + j])] for j in range(n)]
+        )
+        pos += n
     feature["coordinates"] = new_coords
     return feature
 

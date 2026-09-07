@@ -8,6 +8,7 @@ from gigamercado._accel import (
     HAS_NUMBA,
     _xy_one,
     find_extrema_fast,
+    project_geom_batch,
     tile_extrema_fast,
 )
 from gigamercado._dispatch import HAS_GPU
@@ -111,8 +112,16 @@ def burn(polys, zoom):
     tilerange = tile_extrema(bounds, zoom)
     afftrans = make_transform(tilerange, zoom)
 
+    if HAS_NUMBA or HAS_GPU:
+        # Single parallel _xy_batch for all features
+        geoms = [geom["geometry"] for geom in polys]
+        proj_geoms = project_geom_batch(geoms)
+        raster_input = ((g, 255) for g in proj_geoms)
+    else:
+        raster_input = ((project_geom(geom["geometry"]), 255) for geom in polys)
+
     burn = features.rasterize(
-        ((project_geom(geom["geometry"]), 255) for geom in polys),
+        raster_input,
         out_shape=(
             (
                 tilerange["y"]["max"] - tilerange["y"]["min"],
